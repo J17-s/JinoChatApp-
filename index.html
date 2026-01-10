@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jino Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Icon library -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+
+<body>
+    <div class="app-layout">
+        <div class="sidebar-overlay" id="sidebar-overlay"></div>
+        <!-- サイドバー -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-top">
+                <button class="new-chat-btn" id="new-chat-btn">
+                    <i class="ph ph-plus"></i>
+                    <span>新しいチャット</span>
+                </button>
+                <button class="icon-btn search-chat-btn" id="search-chat-btn" title="検索">
+                    <i class="ph ph-magnifying-glass"></i>
+                </button>
+            </div>
+
+            <div class="search-container" id="search-container">
+                <div class="search-input-wrapper">
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" id="chat-search-input" placeholder="チャットを検索...">
+                </div>
+                <div class="filter-chips">
+                    <button class="filter-chip active" data-filter="title">タイトル</button>
+                    <button class="filter-chip" data-filter="content">メッセージ</button>
+                </div>
+            </div>
+
+            <div class="history-header" id="history-header">
+                <span>あなたのチャット</span>
+                <i class="ph-bold ph-caret-down toggle-icon"></i>
+            </div>
+
+            <nav class="history-list" id="history-list">
+                <!-- History items will be dynamically inserted here -->
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="sidebar-controls">
+                    <button class="menu-item icon-only" id="theme-toggle" title="ダークモード">
+                        <i class="ph ph-moon"></i>
+                    </button>
+                    <button class="menu-item icon-only" id="settings-btn" title="設定">
+                        <i class="ph ph-gear"></i>
+                    </button>
+                </div>
+                <div class="user-profile">
+                    <img src="user_avatar.png" alt="User" class="avatar" style="object-fit:cover;">
+                    <span class="username">Yuuka</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <header class="chat-header">
+                <button class="icon-btn mobile-menu-btn" id="mobile-menu-btn">
+                    <i class="ph ph-list"></i>
+                </button>
+                <div class="header-title-wrapper">
+                    <h2 id="chat-title" contenteditable="true" spellcheck="false">Jinoとのチャットアプリ計画</h2>
+                    <div class="model-selector">
+                        <button class="model-btn" id="model-toggle">
+                            Jino 1.0 <i class="ph ph-caret-down"></i>
+                        </button>
+                        <div class="model-menu hidden" id="model-menu">
+                            <button class="model-option active" data-model="Jino 1.0">Jino 1.0</button>
+                            <button class="model-option" data-model="GPT-4o">GPT-4o</button>
+                            <button class="model-option" data-model="Claude 3.5 Sonnet">Claude 3.5 Sonnet</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="mode-toggle-btn" id="room-toggle-btn" title="ルームモード">
+                        <i class="ph ph-cube"></i>
+                        <span>ルーム</span>
+                    </button>
+                    <button class="icon-btn"><i class="ph ph-share-network"></i></button>
+                </div>
+            </header>
+
+            <div class="chat-area" id="chat-area">
+                <!-- Messages will beInserted here -->
+            </div>
+
+            <!-- Room Mode Container (Now a 2D Illustrator Stage) -->
+            <div class="room-container" id="room-container" style="display: none;">
+                <!-- Chibi Characters -->
+                <div id="chibi-jino" class="chibi-char jino">
+                    <div class="speech-bubble" id="bubble-jino">
+                        <div class="bubble-content">おう、ユウカ！ルームへようこそ！</div>
+                        <div class="bubble-arrow"></div>
+                    </div>
+                    <img src="chibi_jino.png" alt="chibi-jino" class="chibi-img">
+                </div>
+                <div id="chibi-yuuka" class="chibi-char yuuka">
+                    <div class="speech-bubble" id="bubble-yuuka">
+                        <div class="bubble-content">...</div>
+                        <div class="bubble-arrow"></div>
+                    </div>
+                    <img src="chibi_yuuka.png" alt="chibi-yuuka" class="chibi-img">
+                </div>
+
+                <!-- Floating Room Input -->
+                <div class="room-input-container">
+                    <div class="room-input-box">
+                        <textarea id="room-message-input" placeholder="メッセージを入力..."></textarea>
+                        <button id="room-send-btn">
+                            <i class="ph-bold ph-paper-plane-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="input-area-wrapper">
+                <div class="input-area">
+                    <button class="attach-btn" id="attach-btn"><i class="ph ph-plus-circle"></i></button>
+                    <input type="file" id="file-input" style="display: none;" multiple>
+                    <textarea id="message-input" placeholder="ジノにメッセージを送る..." autocomplete="off" rows="1"></textarea>
+                    <button id="send-button" disabled>
+                        <i class="ph ph-paper-plane-right"></i>
+                    </button>
+                </div>
+                <p class="disclaimer">Jino can make mistakes. Please verify important information.</p>
+            </footer>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
