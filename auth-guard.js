@@ -8,41 +8,62 @@ const ALLOWED_EMAILS = ['321mugen@gmail.com'];
 // Initialize Supabase client
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Debug Overlay
+function showDebugError(message) {
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.backgroundColor = 'rgba(0,0,0,0.8)';
+    overlay.style.color = 'white';
+    overlay.style.zIndex = '9999';
+    overlay.style.display = 'flex';
+    overlay.style.flexDirection = 'column';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.padding = '20px';
+    overlay.style.textAlign = 'center';
+
+    overlay.innerHTML = `
+        <h2 style="color: #ff4444; margin-bottom: 20px;">⚠️ Login Error</h2>
+        <p style="font-size: 18px; margin-bottom: 20px;">${message}</p>
+        <button onclick="window.location.href='login.html'" style="padding: 10px 20px; font-size: 16px; background: white; color: black; border: none; border-radius: 5px; cursor: pointer;">
+            Back to Login
+        </button>
+    `;
+
+    document.body.appendChild(overlay);
+}
+
 // Check authentication on page load
 async function checkAuthOnMainPage() {
     console.log("🔒 Checking auth state...");
 
-    // Wait for auth state to settle (important for redirects)
+    // Wait for auth state to settle
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
         console.log("📡 Auth State Changed:", event);
-        console.log("👤 Session:", session ? "Found" : "Not Found");
 
         if (!session) {
-            console.log("❌ No session, redirecting to login.html");
-            // Not logged in - redirect to login page
-            // Avoid infinite loop if already on login page (though this script runs on index)
-            window.location.href = 'login.html';
+            console.log("❌ No session found");
+            showDebugError("セッションが見つかりませんでした。<br>Supabaseの設定か、Cookieの問題の可能性があります。");
             return;
         }
 
-        const userEmail = session.user.email.toLowerCase(); // Handle case sensitivity
-        console.log("📧 User Email:", userEmail);
-
+        const userEmail = session.user.email.toLowerCase();
         const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
-        console.log("✅ Is Allowed:", isAllowed);
 
         // Check if email is in whitelist
         if (!isAllowed) {
-            console.log("🚫 User not authorized, signing out...");
-            // Not authorized - sign out and redirect
+            console.log("🚫 User not authorized");
             await supabaseClient.auth.signOut();
-            alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
-            window.location.href = 'login.html';
+            showDebugError(`このアカウント (${userEmail}) は<br>アクセスが許可されていません。`);
             return;
         }
 
-        // Authorized - update UI with user info
-        console.log("🎉 Login successful! Welcome Yuuka!");
+        // Authorized
+        console.log("🎉 Login successful!");
         updateUserProfile(session.user);
     });
 }
