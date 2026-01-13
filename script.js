@@ -108,6 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const copyBtn = document.createElement('button');
             copyBtn.classList.add('icon-btn-small');
             copyBtn.innerHTML = '<i class="ph ph-copy"></i>';
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalHTML = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="ph-fill ph-check"></i>';
+                    setTimeout(() => copyBtn.innerHTML = originalHTML, 2000);
+                });
+            };
             footerDiv.appendChild(copyBtn);
 
             // Time
@@ -129,12 +136,46 @@ document.addEventListener('DOMContentLoaded', () => {
             const copyBtn = document.createElement('button');
             copyBtn.classList.add('icon-btn-small');
             copyBtn.innerHTML = '<i class="ph ph-copy"></i>';
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalHTML = copyBtn.innerHTML;
+                    copyBtn.innerHTML = '<i class="ph-fill ph-check"></i>';
+                    setTimeout(() => copyBtn.innerHTML = originalHTML, 2000);
+                });
+            };
             footerDiv.appendChild(copyBtn);
 
             // Edit Button
             const editBtn = document.createElement('button');
             editBtn.classList.add('icon-btn-small');
             editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+            editBtn.onclick = () => {
+                const isEditing = bubble.isContentEditable;
+                if (isEditing) {
+                    // Save changes
+                    bubble.contentEditable = "false";
+                    bubble.style.outline = "none";
+                    editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+                    saveChat();
+                } else {
+                    // Enable editing
+                    bubble.contentEditable = "true";
+                    bubble.focus();
+                    bubble.style.outline = "2px solid var(--jino-accent)";
+                    bubble.style.borderRadius = "4px";
+                    editBtn.innerHTML = '<i class="ph-fill ph-check"></i>';
+
+                    // Save on blur
+                    const onBlur = () => {
+                        bubble.contentEditable = "false";
+                        bubble.style.outline = "none";
+                        editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+                        saveChat();
+                        bubble.removeEventListener('blur', onBlur);
+                    };
+                    bubble.addEventListener('blur', onBlur);
+                }
+            };
             footerDiv.appendChild(editBtn);
         }
 
@@ -681,11 +722,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Settings Logic ---
+    // --- Settings/Logout Logic ---
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            alert('設定画面はまだ準備中だぜ！どんな設定が欲しいか教えてくれよな。');
+        settingsBtn.addEventListener('click', async () => {
+            const confirmLogout = confirm('ログアウトしますか？');
+            if (confirmLogout && typeof logout === 'function') {
+                await logout();
+            }
         });
     }
 
