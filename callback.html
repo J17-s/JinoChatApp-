@@ -44,9 +44,22 @@
 <body>
     <div class="loader"></div>
     <p>認証中... ジノとの接続を確立しています。</p>
+    <div id="debug-log"
+        style="margin-top: 20px; font-size: 12px; color: #888; font-family: monospace; max-width: 80%; word-break: break-all;">
+    </div>
+    <button id="manual-proceed"
+        style="display: none; margin-top: 20px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        メインページへ強制移動
+    </button>
 
     <script>
-        // Supabase Configuration (Explicitly reusing keys)
+        const logDiv = document.getElementById('debug-log');
+        function log(msg) {
+            console.log(msg);
+            logDiv.innerHTML += `<div>${msg}</div>`;
+        }
+
+        // Supabase Configuration
         const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
         const ALLOWED_EMAILS = ['321mugen@gmail.com'];
@@ -56,50 +69,78 @@
             auth: {
                 persistSession: true,
                 autoRefreshToken: true,
-                detectSessionInUrl: true // Critical for callback page
+                detectSessionInUrl: true
             }
         });
 
         async function handleCallback() {
+            log("🚀 Callback initialization started...");
+
+            // Show manual proceed button after 5 seconds just in case
+            setTimeout(() => {
+                const btn = document.getElementById('manual-proceed');
+                btn.style.display = 'block';
+                btn.onclick = () => window.location.href = 'index.html';
+                log("⚠️ Timeout: Showing manual proceed button");
+            }, 5000);
+
             try {
-                // Wait for session to be established from URL
-                const { data: { session }, error } = await supabase.auth.getSession();
-
-                if (error) throw error;
-
-                if (!session) {
-                    // Sometimes onAuthStateChange is needed if getSession returns null initially
-                    supabase.auth.onAuthStateChange(async (event, session) => {
-                        if (session) {
-                            validateAndRedirect(session);
-                        } else {
-                            // If still no session after a short wait, it failed
-                            setTimeout(() => {
-                                if (!session) showFailure("セッションが見つかりませんでした。");
-                            }, 2000);
-                        }
-                    });
+                // Check URL Hash first
+                if (window.location.hash) {
+                    log("📦 Hash found in URL: " + window.location.hash.substring(0, 50) + "...");
                 } else {
-                    validateAndRedirect(session);
+                    log("❌ No hash found in URL!");
                 }
+
+                // Wait for session
+                const { data, error } = await supabase.auth.getSession();
+
+                if (error) {
+                    log("❌ getSession Error: " + error.message);
+                    throw error;
+                }
+
+                if (data.session) {
+                    log("🎉 Session found immediately!");
+                    validateAndRedirect(data.session);
+                    return;
+                }
+
+                log("⏳ Waiting for onAuthStateChange...");
+
+                // Set up listener
+                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                    log(`📡 Auth Event: ${event}`);
+                    if (session) {
+                        log("🎉 Session established via event!");
+                        validateAndRedirect(session);
+                        subscription.unsubscribe();
+                    }
+                });
+
             } catch (err) {
                 console.error('Callback error:', err);
-                showFailure("認証エラーが発生しました: " + err.message);
+                showFailure("認証エラー: " + err.message);
             }
         }
 
         async function validateAndRedirect(session) {
             const userEmail = session.user.email.toLowerCase();
+            log(`📧 Checking email: ${userEmail}`);
+
             const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
 
             if (!isAllowed) {
+                log("🚫 Email not allowed");
                 await supabase.auth.signOut();
-                showFailure(`このアカウント (${userEmail}) はアクセスが許可されていません。`);
+                showFailure(`アカウント (${userEmail}) は許可されていません。`);
                 return;
             }
 
-            // Success! Redirect to main app
-            window.location.href = 'index.html';
+            log("✅ Validation successful! Redirecting...");
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 500);
         }
 
         function showFailure(message) {
