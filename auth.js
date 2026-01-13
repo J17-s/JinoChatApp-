@@ -38,7 +38,8 @@ async function signInWithGoogle() {
     const { data, error } = await supabaseAuth.auth.signInWithOAuth({
         provider: 'google',
         options: {
-            redirectTo: window.location.origin + '/index.html'
+            // Redirect to callback page to handle session establishment
+            redirectTo: window.location.origin + '/callback.html'
         }
     });
 

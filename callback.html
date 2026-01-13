@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jino Chat - 認証中...</title>
+    <style>
+        body {
+            background-color: #1a1a2e;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+    <div class="loader"></div>
+    <p>認証中... ジノとの接続を確立しています。</p>
+
+    <script>
+        // Supabase Configuration (Explicitly reusing keys)
+        const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
+        const ALLOWED_EMAILS = ['321mugen@gmail.com'];
+
+        // Initialize Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true // Critical for callback page
+            }
+        });
+
+        async function handleCallback() {
+            try {
+                // Wait for session to be established from URL
+                const { data: { session }, error } = await supabase.auth.getSession();
+
+                if (error) throw error;
+
+                if (!session) {
+                    // Sometimes onAuthStateChange is needed if getSession returns null initially
+                    supabase.auth.onAuthStateChange(async (event, session) => {
+                        if (session) {
+                            validateAndRedirect(session);
+                        } else {
+                            // If still no session after a short wait, it failed
+                            setTimeout(() => {
+                                if (!session) showFailure("セッションが見つかりませんでした。");
+                            }, 2000);
+                        }
+                    });
+                } else {
+                    validateAndRedirect(session);
+                }
+            } catch (err) {
+                console.error('Callback error:', err);
+                showFailure("認証エラーが発生しました: " + err.message);
+            }
+        }
+
+        async function validateAndRedirect(session) {
+            const userEmail = session.user.email.toLowerCase();
+            const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
+
+            if (!isAllowed) {
+                await supabase.auth.signOut();
+                showFailure(`このアカウント (${userEmail}) はアクセスが許可されていません。`);
+                return;
+            }
+
+            // Success! Redirect to main app
+            window.location.href = 'index.html';
+        }
+
+        function showFailure(message) {
+            document.querySelector('.loader').style.display = 'none';
+            const p = document.querySelector('p');
+            p.innerHTML = `<span style="color: #ff6b6b">⚠️ エラー: ${message}</span><br><br><a href="login.html" style="color: white">ログイン画面に戻る</a>`;
+        }
+
+        handleCallback();
+    </script>
+</body>
+
+</html>
