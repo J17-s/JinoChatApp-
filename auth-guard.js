@@ -28,7 +28,14 @@ function showDebugError(message) {
 
     overlay.innerHTML = `
         <h2 style="color: #ff4444; margin-bottom: 20px;">⚠️ Login Error</h2>
-        <p style="font-size: 18px; margin-bottom: 20px;">${message}</p>
+        <p style="font-size: 16px; margin-bottom: 15px;">${message}</p>
+        
+        <div style="background: #333; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-family: monospace; font-size: 12px; text-align: left; width: 90%; word-break: break-all;">
+            <strong>Current URL:</strong><br>${window.location.href.substring(0, 100)}...<br><br>
+            <strong>Has Hash:</strong> ${window.location.hash ? 'YES' : 'NO'}<br>
+            <strong>Hash Length:</strong> ${window.location.hash.length}
+        </div>
+
         <button onclick="window.location.href='login.html'" style="padding: 10px 20px; font-size: 16px; background: white; color: black; border: none; border-radius: 5px; cursor: pointer;">
             Back to Login
         </button>
