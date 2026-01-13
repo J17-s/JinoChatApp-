@@ -10,27 +10,30 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 // Check authentication on page load
 async function checkAuthOnMainPage() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
+    // Wait for auth state to settle (important for redirects)
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        if (!session) {
+            // Not logged in - redirect to login page
+            // Avoid infinite loop if already on login page (though this script runs on index)
+            window.location.href = 'login.html';
+            return;
+        }
 
-    if (!session) {
-        // Not logged in - redirect to login page
-        window.location.href = 'login.html';
-        return;
-    }
+        const userEmail = session.user.email.toLowerCase(); // Handle case sensitivity
+        const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
 
-    const userEmail = session.user.email;
+        // Check if email is in whitelist
+        if (!isAllowed) {
+            // Not authorized - sign out and redirect
+            await supabaseClient.auth.signOut();
+            alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
+            window.location.href = 'login.html';
+            return;
+        }
 
-    // Check if email is in whitelist
-    if (!ALLOWED_EMAILS.includes(userEmail)) {
-        // Not authorized - sign out and redirect
-        await supabaseClient.auth.signOut();
-        alert('このアカウントはアクセスが許可されていません。\nYuuka専用のアプリです。');
-        window.location.href = 'login.html';
-        return;
-    }
-
-    // Authorized - update UI with user info
-    updateUserProfile(session.user);
+        // Authorized - update UI with user info
+        updateUserProfile(session.user);
+    });
 }
 
 // Update user profile in sidebar
@@ -59,6 +62,6 @@ async function logout() {
 }
 
 // Run auth check immediately
-if (window.location.pathname.includes('index.html') || window.location.pathname === '/') {
+if (window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('app')) {
     checkAuthOnMainPage();
 }
