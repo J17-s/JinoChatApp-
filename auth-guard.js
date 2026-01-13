@@ -6,7 +6,13 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const ALLOWED_EMAILS = ['321mugen@gmail.com'];
 
 // Initialize Supabase client
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+    }
+});
 
 // Debug Overlay
 function showDebugError(message) {
@@ -51,17 +57,35 @@ async function checkAuthOnMainPage() {
     // Check if coming back from OAuth redirect (URL has hash)
     if (window.location.hash && window.location.hash.includes('access_token')) {
         console.log("🔗 OAuth redirect detected, attempting file-based session recovery...");
-        try {
-            // Using getSession() handles the hash fragment automatically in most cases
-            const { data, error } = await supabaseClient.auth.getSession();
-            if (error) throw error;
 
+        try {
+            // 1. Try standard getSession first
+            const { data, error } = await supabaseClient.auth.getSession();
             if (data.session) {
-                console.log("🎉 Session recovered from URL hash!");
+                console.log("🎉 Session recovered via getSession!");
                 handleSession(data.session);
-                // Clean up URL
                 window.history.replaceState({}, document.title, window.location.pathname);
                 return;
+            }
+
+            // 2. Fallback: Manually parse hash if getSession fail (sometimes happens with auto-redirects)
+            console.log("⚠️ getSession failed, trying manual hash parsing...");
+            const hashParams = new URLSearchParams(window.location.hash.substring(1));
+            const accessToken = hashParams.get('access_token');
+            const refreshToken = hashParams.get('refresh_token');
+
+            if (accessToken && refreshToken) {
+                const { data: manualData, error: manualError } = await supabaseClient.auth.setSession({
+                    access_token: accessToken,
+                    refresh_token: refreshToken
+                });
+
+                if (manualData.session) {
+                    console.log("🎉 Session recovered via setSession!");
+                    handleSession(manualData.session);
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    return;
+                }
             }
         } catch (e) {
             console.error("⚠️ Hash recovery failed:", e);
