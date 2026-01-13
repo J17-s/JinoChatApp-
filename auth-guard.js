@@ -10,9 +10,15 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 
 // Check authentication on page load
 async function checkAuthOnMainPage() {
+    console.log("🔒 Checking auth state...");
+
     // Wait for auth state to settle (important for redirects)
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log("📡 Auth State Changed:", event);
+        console.log("👤 Session:", session ? "Found" : "Not Found");
+
         if (!session) {
+            console.log("❌ No session, redirecting to login.html");
             // Not logged in - redirect to login page
             // Avoid infinite loop if already on login page (though this script runs on index)
             window.location.href = 'login.html';
@@ -20,10 +26,14 @@ async function checkAuthOnMainPage() {
         }
 
         const userEmail = session.user.email.toLowerCase(); // Handle case sensitivity
+        console.log("📧 User Email:", userEmail);
+
         const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
+        console.log("✅ Is Allowed:", isAllowed);
 
         // Check if email is in whitelist
         if (!isAllowed) {
+            console.log("🚫 User not authorized, signing out...");
             // Not authorized - sign out and redirect
             await supabaseClient.auth.signOut();
             alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
@@ -32,6 +42,7 @@ async function checkAuthOnMainPage() {
         }
 
         // Authorized - update UI with user info
+        console.log("🎉 Login successful! Welcome Yuuka!");
         updateUserProfile(session.user);
     });
 }
