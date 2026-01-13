@@ -68,11 +68,14 @@ async function checkAuthOnMainPage() {
                 return;
             }
 
-            // 2. Fallback: Manually parse hash if getSession fail (sometimes happens with auto-redirects)
+            // 2. Fallback: Manually parse hash
             console.log("⚠️ getSession failed, trying manual hash parsing...");
             const hashParams = new URLSearchParams(window.location.hash.substring(1));
             const accessToken = hashParams.get('access_token');
             const refreshToken = hashParams.get('refresh_token');
+            const type = hashParams.get('type');
+
+            console.log(`🎫 Token Debug: AccessToken=${accessToken ? 'YES' : 'NO'}, RefreshToken=${refreshToken ? 'YES' : 'NO'}, Type=${type}`);
 
             if (accessToken && refreshToken) {
                 const { data: manualData, error: manualError } = await supabaseClient.auth.setSession({
@@ -85,11 +88,42 @@ async function checkAuthOnMainPage() {
                     handleSession(manualData.session);
                     window.history.replaceState({}, document.title, window.location.pathname);
                     return;
+                } else {
+                    console.error("❌ setSession failed:", manualError);
+                }
+            } else if (accessToken) {
+                // 3. Last Resort: Identify User directly from Token (Bypass Persistence issues)
+                console.log("🚀 Attempting direct token verification (Last Resort)...");
+                const user = await getUserFromToken(accessToken);
+                if (user) {
+                    console.log("🎉 User identified directly from token!");
+                    // Fake a session object for UI
+                    handleSession({ user: user });
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    return;
                 }
             }
         } catch (e) {
             console.error("⚠️ Hash recovery failed:", e);
         }
+    }
+
+    // Helper to get user from token directly
+    async function getUserFromToken(token) {
+        try {
+            const { data: { user }, error } = await supabaseClient.auth.getUser(token);
+            if (user) return user;
+
+            // If API fails, try manual decode (JWT) mostly simply to extract email for check
+            // Note: usage of jwt_decode is not available, we use simple base64 decode for payload
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            if (payload && payload.email) {
+                return { email: payload.email, user_metadata: payload.user_metadata || {} };
+            }
+        } catch (e) {
+            console.error("Token decode failed", e);
+        }
+        return null;
     }
 
     // Standard auth state listener
