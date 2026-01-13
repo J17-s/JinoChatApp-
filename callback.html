@@ -15,17 +15,18 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
-            font-family: sans-serif;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
         }
 
         .loader {
-            border: 4px solid #f3f3f3;
+            border: 4px solid #333;
             border-top: 4px solid #3498db;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             animation: spin 1s linear infinite;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         @keyframes spin {
@@ -38,96 +39,150 @@
             }
         }
 
+        #status {
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+
         #log {
-            margin-top: 20px;
             font-family: monospace;
-            font-size: 12px;
+            font-size: 11px;
+            color: #666;
+            max-width: 90%;
+            word-break: break-all;
+            margin-top: 20px;
+            line-height: 1.5;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 16px;
+            transition: 0.3s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #444;
             color: #888;
-            text-align: left;
-            width: 80%;
+            margin-top: 8px;
         }
     </style>
 </head>
 
 <body>
-    <div class="loader"></div>
-    <p id="status">システムを起動しています...</p>
+    <div class="loader" id="spinner"></div>
+    <div id="status">認証システムをロード中...</div>
     <div id="log"></div>
-    <button id="retry" style="display:none; margin-top:20px; padding:10px 20px; cursor:pointer;"
-        onclick="location.reload()">再試行</button>
-    <button id="go-home" style="display:none; margin-top:10px; padding:10px 20px; cursor:pointer;"
-        onclick="location.href='index.html'">メインへ移動</button>
 
-    <!-- Load Supabase from a reliable CDN with onload handler -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2" onload="initAuth()" onerror="loadError()"></script>
+    <div id="controls" style="display:none; flex-direction: column;">
+        <button class="btn btn-primary" onclick="window.location.href='index.html'">メインページへ移動を試みる</button>
+        <button class="btn btn-outline" onclick="window.location.href='login.html'">ログインへ戻る</button>
+    </div>
+
+    <!-- SDK Loader -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <script>
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const controls = document.getElementById('controls');
+        const spinner = document.getElementById('spinner');
+
         function log(msg) {
-            const el = document.getElementById('log');
-            if (el) el.innerHTML += `<div>${msg}</div>`;
             console.log(msg);
+            logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
         }
 
-        function loadError() {
-            document.getElementById('status').innerText = '⚠️ システムの読み込みに失敗しました。';
-            document.getElementById('retry').style.display = 'block';
-        }
+        async function start() {
+            log("🚀 Starting auth process...");
 
-        async function initAuth() {
-            log("📚 Library loaded. Initializing...");
-            document.getElementById('status').innerText = '認証情報を確認しています...';
-
-            // Show manual buttons after 3 seconds safety timer
+            // Safety timer: show buttons after 4 seconds
             setTimeout(() => {
-                document.getElementById('go-home').style.display = 'block';
-            }, 3000);
+                controls.style.display = 'flex';
+                log("🕒 Safety timer reached. Controls enabled.");
+            }, 4000);
 
             try {
+                if (typeof supabase === 'undefined') {
+                    throw new Error("Supabase SDK failed to load from CDN.");
+                }
+
                 const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
                 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
-
-                // Initialize
-                const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
                     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
                 });
 
-                log("🔄 Checking session...");
+                log("📡 Supabase client initialized.");
+                statusEl.innerText = 'セッションを取得しています...';
 
-                // 1. Check URL Hash
-                if (window.location.hash) log("📦 Hash found!");
+                // Give it a small moment to parse hash
+                await new Array(500);
 
-                // 2. Try to get session
-                const { data, error } = await supabase.auth.getSession();
+                // Try to get session
+                const { data: { session }, error } = await client.auth.getSession();
 
-                if (data?.session) {
-                    log("🎉 OK! Logged in as: " + data.session.user.email);
+                if (error) {
+                    log("❌ Auth Error: " + error.message);
+                    statusEl.innerText = '認証に失敗しました。';
+                    return;
+                }
 
-                    // Whitelist check
-                    if (data.session.user.email === '321mugen@gmail.com') {
-                        log("✅ Access Granted. Redirecting...");
-                        window.location.href = 'index.html';
-                    } else {
-                        log("🚫 Access Denied.");
-                        await supabase.auth.signOut();
-                        alert("許可されていないアカウントです。");
-                        window.location.href = 'login.html';
-                    }
+                if (session) {
+                    log("🎉 Session detected for: " + session.user.email);
+                    handleUser(session.user);
                 } else {
-                    log("⏳ Waiting for auth event...");
-                    supabase.auth.onAuthStateChange((event, session) => {
-                        log("📡 Event: " + event);
-                        if (session) {
-                            if (session.user.email === '321mugen@gmail.com') {
-                                window.location.href = 'index.html';
-                            }
+                    log("⏳ No active session found. Waiting for state change...");
+                    statusEl.innerText = 'ログイン中... (待受状態)';
+
+                    client.auth.onAuthStateChange(async (event, newSession) => {
+                        log("🔔 Auth Event: " + event);
+                        if (newSession) {
+                            log("🎉 New session established!");
+                            handleUser(newSession.user);
                         }
                     });
                 }
 
-            } catch (e) {
-                log("❌ Error: " + e.message);
+            } catch (err) {
+                log("🚨 Fatal Error: " + err.message);
+                statusEl.innerText = 'システムエラーが発生しました。';
+                spinner.style.borderTopColor = '#ff4757';
             }
         }
+
+        function handleUser(user) {
+            const email = user.email.toLowerCase();
+            log("📧 Checking email for: " + email);
+
+            if (email === '321mugen@gmail.com') {
+                log("✅ Access confirmed for Yuuka!");
+                statusEl.innerText = 'おかえり、ユウカ！接続中...';
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 1000);
+            } else {
+                log("🚫 Unauthorized user attempted access.");
+                statusEl.innerText = 'このアカウントは許可されていません。';
+                spinner.style.display = 'none';
+            }
+        }
+
+        // Start when ready
+        window.addEventListener('load', start);
     </script>
 </body>
 
