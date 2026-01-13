@@ -41,31 +41,66 @@ function showDebugError(message) {
 async function checkAuthOnMainPage() {
     console.log("🔒 Checking auth state...");
 
-    // Wait for auth state to settle
+    // Check if coming back from OAuth redirect (URL has hash)
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+        console.log("🔗 OAuth redirect detected, attempting file-based session recovery...");
+        try {
+            // Using getSession() handles the hash fragment automatically in most cases
+            const { data, error } = await supabaseClient.auth.getSession();
+            if (error) throw error;
+
+            if (data.session) {
+                console.log("🎉 Session recovered from URL hash!");
+                handleSession(data.session);
+                // Clean up URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+            }
+        } catch (e) {
+            console.error("⚠️ Hash recovery failed:", e);
+        }
+    }
+
+    // Standard auth state listener
     supabaseClient.auth.onAuthStateChange(async (event, session) => {
         console.log("📡 Auth State Changed:", event);
-
-        if (!session) {
-            console.log("❌ No session found");
-            showDebugError("セッションが見つかりませんでした。<br>Supabaseの設定か、Cookieの問題の可能性があります。");
-            return;
-        }
-
-        const userEmail = session.user.email.toLowerCase();
-        const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
-
-        // Check if email is in whitelist
-        if (!isAllowed) {
-            console.log("🚫 User not authorized");
-            await supabaseClient.auth.signOut();
-            showDebugError(`このアカウント (${userEmail}) は<br>アクセスが許可されていません。`);
-            return;
-        }
-
-        // Authorized
-        console.log("🎉 Login successful!");
-        updateUserProfile(session.user);
+        handleSession(session);
     });
+}
+
+// Common session handler
+async function handleSession(session) {
+    if (!session) {
+        console.log("❌ No session found");
+        // Only show error if we're not just loading the page for the first time
+        // If it's initial load and no session, just redirect
+        if (!window.location.hash) {
+            window.location.href = 'login.html';
+        } else {
+            showDebugError("セッションが見つかりませんでした。<br>Supabaseの設定か、Cookieの問題の可能性があります。");
+        }
+        return;
+    }
+
+    const userEmail = session.user.email.toLowerCase();
+    const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
+
+    // Check if email is in whitelist
+    if (!isAllowed) {
+        console.log("🚫 User not authorized");
+        await supabaseClient.auth.signOut();
+        showDebugError(`このアカウント (${userEmail}) は<br>アクセスが許可されていません。`);
+        return;
+    }
+
+    // Authorized
+    console.log("🎉 Login successful!");
+
+    // Hide debug overlay if it exists
+    const existingOverlay = document.querySelector('div[style*="z-index: 9999"]');
+    if (existingOverlay) existingOverlay.remove();
+
+    updateUserProfile(session.user);
 }
 
 // Update user profile in sidebar
