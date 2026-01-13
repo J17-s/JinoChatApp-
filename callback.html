@@ -15,7 +15,7 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
-            font-family: 'Helvetica Neue', Arial, sans-serif;
+            font-family: sans-serif;
         }
 
         .loader {
@@ -37,119 +37,97 @@
                 transform: rotate(360deg);
             }
         }
+
+        #log {
+            margin-top: 20px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #888;
+            text-align: left;
+            width: 80%;
+        }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
     <div class="loader"></div>
-    <p>認証中... ジノとの接続を確立しています。</p>
-    <div id="debug-log"
-        style="margin-top: 20px; font-size: 12px; color: #888; font-family: monospace; max-width: 80%; word-break: break-all;">
-    </div>
-    <button id="manual-proceed"
-        style="display: none; margin-top: 20px; padding: 10px 20px; background: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">
-        メインページへ強制移動
-    </button>
+    <p id="status">システムを起動しています...</p>
+    <div id="log"></div>
+    <button id="retry" style="display:none; margin-top:20px; padding:10px 20px; cursor:pointer;"
+        onclick="location.reload()">再試行</button>
+    <button id="go-home" style="display:none; margin-top:10px; padding:10px 20px; cursor:pointer;"
+        onclick="location.href='index.html'">メインへ移動</button>
+
+    <!-- Load Supabase from a reliable CDN with onload handler -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2" onload="initAuth()" onerror="loadError()"></script>
 
     <script>
-        const logDiv = document.getElementById('debug-log');
         function log(msg) {
+            const el = document.getElementById('log');
+            if (el) el.innerHTML += `<div>${msg}</div>`;
             console.log(msg);
-            logDiv.innerHTML += `<div>${msg}</div>`;
         }
 
-        // Supabase Configuration
-        const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
-        const ALLOWED_EMAILS = ['321mugen@gmail.com'];
+        function loadError() {
+            document.getElementById('status').innerText = '⚠️ システムの読み込みに失敗しました。';
+            document.getElementById('retry').style.display = 'block';
+        }
 
-        // Initialize Supabase
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-            auth: {
-                persistSession: true,
-                autoRefreshToken: true,
-                detectSessionInUrl: true
-            }
-        });
+        async function initAuth() {
+            log("📚 Library loaded. Initializing...");
+            document.getElementById('status').innerText = '認証情報を確認しています...';
 
-        async function handleCallback() {
-            log("🚀 Callback initialization started...");
-
-            // Show manual proceed button after 5 seconds just in case
+            // Show manual buttons after 3 seconds safety timer
             setTimeout(() => {
-                const btn = document.getElementById('manual-proceed');
-                btn.style.display = 'block';
-                btn.onclick = () => window.location.href = 'index.html';
-                log("⚠️ Timeout: Showing manual proceed button");
-            }, 5000);
+                document.getElementById('go-home').style.display = 'block';
+            }, 3000);
 
             try {
-                // Check URL Hash first
-                if (window.location.hash) {
-                    log("📦 Hash found in URL: " + window.location.hash.substring(0, 50) + "...");
-                } else {
-                    log("❌ No hash found in URL!");
-                }
+                const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
+                const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
 
-                // Wait for session
-                const { data, error } = await supabase.auth.getSession();
-
-                if (error) {
-                    log("❌ getSession Error: " + error.message);
-                    throw error;
-                }
-
-                if (data.session) {
-                    log("🎉 Session found immediately!");
-                    validateAndRedirect(data.session);
-                    return;
-                }
-
-                log("⏳ Waiting for onAuthStateChange...");
-
-                // Set up listener
-                const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-                    log(`📡 Auth Event: ${event}`);
-                    if (session) {
-                        log("🎉 Session established via event!");
-                        validateAndRedirect(session);
-                        subscription.unsubscribe();
-                    }
+                // Initialize
+                const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+                    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
                 });
 
-            } catch (err) {
-                console.error('Callback error:', err);
-                showFailure("認証エラー: " + err.message);
+                log("🔄 Checking session...");
+
+                // 1. Check URL Hash
+                if (window.location.hash) log("📦 Hash found!");
+
+                // 2. Try to get session
+                const { data, error } = await supabase.auth.getSession();
+
+                if (data?.session) {
+                    log("🎉 OK! Logged in as: " + data.session.user.email);
+
+                    // Whitelist check
+                    if (data.session.user.email === '321mugen@gmail.com') {
+                        log("✅ Access Granted. Redirecting...");
+                        window.location.href = 'index.html';
+                    } else {
+                        log("🚫 Access Denied.");
+                        await supabase.auth.signOut();
+                        alert("許可されていないアカウントです。");
+                        window.location.href = 'login.html';
+                    }
+                } else {
+                    log("⏳ Waiting for auth event...");
+                    supabase.auth.onAuthStateChange((event, session) => {
+                        log("📡 Event: " + event);
+                        if (session) {
+                            if (session.user.email === '321mugen@gmail.com') {
+                                window.location.href = 'index.html';
+                            }
+                        }
+                    });
+                }
+
+            } catch (e) {
+                log("❌ Error: " + e.message);
             }
         }
-
-        async function validateAndRedirect(session) {
-            const userEmail = session.user.email.toLowerCase();
-            log(`📧 Checking email: ${userEmail}`);
-
-            const isAllowed = ALLOWED_EMAILS.some(email => email.toLowerCase() === userEmail);
-
-            if (!isAllowed) {
-                log("🚫 Email not allowed");
-                await supabase.auth.signOut();
-                showFailure(`アカウント (${userEmail}) は許可されていません。`);
-                return;
-            }
-
-            log("✅ Validation successful! Redirecting...");
-            setTimeout(() => {
-                window.location.href = 'index.html';
-            }, 500);
-        }
-
-        function showFailure(message) {
-            document.querySelector('.loader').style.display = 'none';
-            const p = document.querySelector('p');
-            p.innerHTML = `<span style="color: #ff6b6b">⚠️ エラー: ${message}</span><br><br><a href="login.html" style="color: white">ログイン画面に戻る</a>`;
-        }
-
-        handleCallback();
     </script>
 </body>
 
