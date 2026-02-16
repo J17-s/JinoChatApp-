@@ -12,10 +12,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <!-- Icon library -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
-    <div class="app-layout">
+    <div class="app-layout" id="app-layout" style="visibility: hidden;">
         <div class="sidebar-overlay" id="sidebar-overlay"></div>
         <!-- サイドバー -->
         <aside class="sidebar" id="sidebar">
@@ -61,6 +63,9 @@
                 <div class="user-profile">
                     <img src="user_avatar.png" alt="User" class="avatar" style="object-fit:cover;">
                     <span class="username">Yuuka</span>
+                    <button class="icon-btn" onclick="logout()" title="ログアウト" style="margin-left:auto;">
+                        <i class="ph ph-sign-out"></i>
+                    </button>
                 </div>
             </div>
         </aside>
@@ -140,7 +145,11 @@
         </main>
     </div>
 
-    <script src="script.js"></script>
+    <script src="js/config/supabase.js?v=6"></script>
+    <script src="js/utils/ui-helpers.js?v=6"></script>
+    <script src="js/utils/chat-storage.js?v=6"></script>
+    <script src="auth-guard.js?v=6"></script>
+    <script src="script.js?v=6"></script>
 </body>
 
 </html>

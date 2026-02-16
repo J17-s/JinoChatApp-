@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jino Chat - 認証中...</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #1a1a2e;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+        }
+
+        .auth-card {
+            max-width: 400px;
+            width: 90%;
+            padding: 40px 30px;
+        }
+
+        .loader {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #a78bfa;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 24px;
+        }
+
+        .loader.error {
+            border-top-color: #ff4757;
+            animation: none;
+        }
+
+        .loader.success {
+            border-top-color: #10b981;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        #status {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #e0e0e0;
+        }
+
+        #sub-status {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        #log {
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #555;
+            max-width: 100%;
+            word-break: break-all;
+            margin-top: 20px;
+            line-height: 1.6;
+            text-align: left;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 28px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 12px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #a78bfa, #7c3aed);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(167, 139, 250, 0.4);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #444;
+            color: #aaa;
+        }
+
+        .btn-outline:hover {
+            border-color: #888;
+            color: #fff;
+        }
+
+        #controls {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .unauthorized-msg {
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.3);
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-top: 16px;
+            color: #ff6b7a;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="auth-card">
+        <div class="loader" id="spinner"></div>
+        <div id="status">認証中...</div>
+        <div id="sub-status">Google アカウントを確認しています</div>
+        <div id="unauthorized-area"></div>
+        <div id="controls">
+            <a class="btn btn-outline" href="login.html">ログインへ戻る</a>
+        </div>
+        <div id="log"></div>
+    </div>
+
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- 共通設定 (SUPABASE_URL, SUPABASE_ANON_KEY, ALLOWED_EMAILS, supabaseClient) -->
+    <script src="js/config/supabase.js?v=6"></script>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const subStatusEl = document.getElementById('sub-status');
+        const logEl = document.getElementById('log');
+        const controls = document.getElementById('controls');
+        const spinner = document.getElementById('spinner');
+        const unauthorizedArea = document.getElementById('unauthorized-area');
+
+        function log(msg) {
+            console.log('[callback]', msg);
+            logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+        }
+
+        function showError(title, subtitle) {
+            statusEl.textContent = title;
+            subStatusEl.textContent = subtitle || '';
+            spinner.classList.add('error');
+            controls.style.display = 'flex';
+        }
+
+        function showSuccess(title, subtitle) {
+            statusEl.textContent = title;
+            subStatusEl.textContent = subtitle || '';
+            spinner.classList.add('success');
+        }
+
+        async function processCallback() {
+            log("🚀 認証コールバック開始...");
+
+            // Safety timer: 8秒後にコントロールを表示
+            const safetyTimer = setTimeout(() => {
+                controls.style.display = 'flex';
+                log("🕒 安全タイマー発動。コントロールを表示。");
+            }, 8000);
+
+            try {
+                // ===================================
+                // Step 1: セッションの取得
+                // ===================================
+
+                let session = null;
+
+                // ① PKCE フロー: URLに ?code= がある場合
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+
+                if (code) {
+                    log("🔐 PKCE code 検出...");
+                    statusEl.textContent = 'セッションを確立中...';
+
+                    const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
+
+                    if (error) {
+                        log("❌ PKCE エラー: " + error.message);
+                        showError('認証に失敗しました', 'もう一度ログインしてください');
+                        clearTimeout(safetyTimer);
+                        return;
+                    }
+
+                    if (data?.session) {
+                        session = data.session;
+                        log("✅ PKCE セッション確立: " + session.user.email);
+                    }
+
+                    // URLからcodeを消す
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+
+                // ② Implicit フロー: ハッシュに access_token がある場合
+                if (!session && window.location.hash.includes('access_token')) {
+                    log("🔐 Implicit トークン検出...");
+                    statusEl.textContent = 'セッションを確立中...';
+
+                    // Supabase SDK が自動的にハッシュからセッションを復元するのを待つ
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    const { data: { session: hashSession }, error } = await supabaseClient.auth.getSession();
+
+                    if (error) {
+                        log("❌ Implicit エラー: " + error.message);
+                        showError('認証に失敗しました', 'もう一度ログインしてください');
+                        clearTimeout(safetyTimer);
+                        return;
+                    }
+
+                    if (hashSession) {
+                        session = hashSession;
+                        log("✅ Implicit セッション確立: " + session.user.email);
+                    }
+
+                    // URLからハッシュを消す
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+
+                // ③ 既存セッション確認
+                if (!session) {
+                    log("⏳ 既存セッション確認中...");
+                    const { data } = await supabaseClient.auth.getSession();
+                    session = data.session;
+
+                    if (session) {
+                        log("✅ 既存セッション発見: " + session.user.email);
+                    }
+                }
+
+                // ④ それでもセッションが無い場合 → onAuthStateChange で待つ
+                if (!session) {
+                    log("⏳ セッション待機中...");
+                    statusEl.textContent = 'ログイン中...';
+                    subStatusEl.textContent = 'セッションを待っています...';
+
+                    session = await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('セッション取得タイムアウト'));
+                        }, 10000);
+
+                        supabaseClient.auth.onAuthStateChange((event, newSession) => {
+                            log("🔔 Auth Event: " + event);
+                            if (newSession) {
+                                clearTimeout(timeout);
+                                resolve(newSession);
+                            }
+                        });
+                    });
+                }
+
+                // ===================================
+                // Step 2: メールのホワイトリストチェック
+                // ===================================
+                const userEmail = session.user.email.toLowerCase();
+                log("📧 メールチェック: " + userEmail);
+
+                const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === userEmail);
+
+                if (isAllowed) {
+                    // ✅ 許可されたユーザー！
+                    log("✅ アクセス許可: " + userEmail);
+                    showSuccess('おかえり、ユウカ！', 'アプリに接続中...');
+                    clearTimeout(safetyTimer);
+
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 800);
+                } else {
+                    // 🚫 許可されていないユーザー
+                    log("🚫 アクセス拒否: " + userEmail);
+
+                    // セッションを破棄
+                    await supabaseClient.auth.signOut();
+                    log("🔓 セッションを破棄しました");
+
+                    showError('アクセスが許可されていません', '');
+                    unauthorizedArea.innerHTML = `
+                        <div class="unauthorized-msg">
+                            <strong>このアプリは Yuuka 専用です。</strong><br>
+                            ログインしたアカウント (${userEmail}) にはアクセス権がありません。
+                        </div>
+                    `;
+                    clearTimeout(safetyTimer);
+                    controls.style.display = 'flex';
+                }
+
+            } catch (err) {
+                log("🚨 エラー: " + err.message);
+                showError('認証に失敗しました', err.message);
+                clearTimeout(safetyTimer);
+            }
+        }
+
+        // ページ読み込み後に実行
+        window.addEventListener('load', processCallback);
+    </script>
+</body>
+
+</html>

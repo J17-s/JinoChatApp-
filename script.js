@@ -58,18 +58,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message', sender === 'user' ? 'message-user' : 'message-jino');
 
-        // アバター生成関数
-        const createAvatar = (src, alt) => {
-            const img = document.createElement('img');
-            img.src = src;
-            img.alt = alt;
-            img.classList.add('avatar-icon');
-            return img;
-        };
-
         // ジノの場合は最初にアバターを追加
         if (sender === 'jino') {
-            const avatar = createAvatar('jino_avatar.png', 'Jino');
+            const avatar = createAvatarElement('jino_avatar.png', 'Jino');
             messageDiv.appendChild(avatar);
         }
 
@@ -80,27 +71,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Bubble
         const bubble = document.createElement('div');
         bubble.classList.add('bubble');
-
-        // Process action text (text in parentheses)
-        const processActionText = (text) => {
-            // Match both （...） and (...)
-            return text.replace(/([（(])(.*?)([）)])/g, '<span class="action-text">$1$2$3</span>');
-        };
-
-        bubble.innerHTML = processActionText(text.replace(/\n/g, '<br>'));
+        bubble.innerHTML = formatMessageText(text);
         contentDiv.appendChild(bubble);
-
 
         // Footer
         const footerDiv = document.createElement('div');
         footerDiv.classList.add('message-footer');
 
-        // Time Generator
-        const now = new Date();
-        const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Time
         const timeSpan = document.createElement('span');
         timeSpan.classList.add('message-time');
-        timeSpan.textContent = timeString;
+        timeSpan.textContent = getFormattedTime();
+
 
         if (sender === 'jino') {
             footerDiv.classList.add('jino-footer');
@@ -108,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const copyBtn = document.createElement('button');
             copyBtn.classList.add('icon-btn-small');
             copyBtn.innerHTML = '<i class="ph ph-copy"></i>';
+            copyBtn.onclick = () => copyToClipboardWithFeedback(text, copyBtn);
             footerDiv.appendChild(copyBtn);
 
             // Time
@@ -129,12 +112,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const copyBtn = document.createElement('button');
             copyBtn.classList.add('icon-btn-small');
             copyBtn.innerHTML = '<i class="ph ph-copy"></i>';
+            copyBtn.onclick = () => copyToClipboardWithFeedback(text, copyBtn);
             footerDiv.appendChild(copyBtn);
 
             // Edit Button
             const editBtn = document.createElement('button');
             editBtn.classList.add('icon-btn-small');
             editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+            editBtn.onclick = () => {
+                const isEditing = bubble.isContentEditable;
+                if (isEditing) {
+                    // Save changes
+                    bubble.contentEditable = "false";
+                    bubble.style.outline = "none";
+                    editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+                    saveChat();
+                } else {
+                    // Enable editing
+                    bubble.contentEditable = "true";
+                    bubble.focus();
+                    bubble.style.outline = "2px solid var(--jino-accent)";
+                    bubble.style.borderRadius = "4px";
+                    editBtn.innerHTML = '<i class="ph-fill ph-check"></i>';
+
+                    // Save on blur
+                    const onBlur = () => {
+                        bubble.contentEditable = "false";
+                        bubble.style.outline = "none";
+                        editBtn.innerHTML = '<i class="ph ph-pencil-simple"></i>';
+                        saveChat();
+                        bubble.removeEventListener('blur', onBlur);
+                    };
+                    bubble.addEventListener('blur', onBlur);
+                }
+            };
             footerDiv.appendChild(editBtn);
         }
 
@@ -143,7 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ユーザーの場合は最後にアバターを追加
         if (sender === 'user') {
-            const avatar = createAvatar('user_avatar.png', 'User');
+            const avatar = createAvatarElement('user_avatar.png', 'User');
             messageDiv.appendChild(avatar);
         }
         chatArea.appendChild(messageDiv);
@@ -205,28 +216,66 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Persistence & State Management ---
-    let chats = JSON.parse(localStorage.getItem('jinoAllChats')) || [];
+    let chats = [];
     let currentChatId = null;
 
-    // Migrate old single history if exists and no new chats
-    const oldHistory = localStorage.getItem('jinoChatHistory');
-    if (oldHistory && chats.length === 0) {
-        const messages = JSON.parse(oldHistory);
-        const id = Date.now().toString();
-        chats.push({
-            id: id,
-            title: "Jinoとのチャットアプリ計画",
-            messages: messages,
-            timestamp: Date.now()
-        });
-        localStorage.removeItem('jinoChatHistory');
-        localStorage.setItem('jinoAllChats', JSON.stringify(chats));
+    // アプリ初期化（Supabaseからデータを読み込む）
+    // 認証フロー: OAuthコールバック処理は callback.html が担当。
+    // ここでは既存セッション確認 + ホワイトリストチェックのみ行う。
+    async function initApp() {
+        try {
+            // 既存セッション確認
+            const { data, error } = await supabaseClient.auth.getSession();
+
+            if (error) {
+                console.error('❌ セッション取得エラー:', error);
+                window.location.href = 'login.html';
+                return;
+            }
+
+            const session = data.session;
+
+            if (!session) {
+                console.log('❌ セッションなし、ログインページへ');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // ホワイトリストチェック
+            const userEmail = session.user.email.toLowerCase();
+            const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === userEmail);
+            if (!isAllowed) {
+                console.log('🚫 許可されていないユーザー:', userEmail);
+                await supabaseClient.auth.signOut();
+                alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
+                window.location.href = 'login.html';
+                return;
+            }
+
+            // ✅ 認証OK！画面を表示 & プロフィール更新
+            console.log('🎉 認証成功:', userEmail);
+            document.getElementById('app-layout').style.visibility = 'visible';
+            updateUserProfile(session.user);
+
+            // localStorageの古いデータがあればSupabaseへ移行
+            await dbMigrateFromLocalStorage();
+
+            // Supabaseからチャット一覧を読み込む
+            chats = await dbLoadAllChats();
+            console.log(`📂 ${chats.length}件のチャットを読み込みました`);
+
+            // 初期表示
+            loadChat();
+        } catch (err) {
+            console.error('🚨 initApp エラー:', err);
+            window.location.href = 'login.html';
+        }
     }
 
-    // Generate ID
+    // Generate ID (UUID はSupabase側で生成するが、互換用に残す)
     const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
 
-    function saveChat() {
+    async function saveChat() {
         if (!currentChatId) return;
 
         const messages = [];
@@ -244,7 +293,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (chatIndex > -1) {
             chats[chatIndex].messages = messages;
             chats[chatIndex].timestamp = Date.now();
-            localStorage.setItem('jinoAllChats', JSON.stringify(chats));
+            // Supabaseに保存
+            await dbSaveMessages(currentChatId, messages);
         }
     }
 
@@ -392,13 +442,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const renameBtn = document.createElement('button');
         renameBtn.className = 'context-menu-item';
         renameBtn.innerHTML = '<i class="ph ph-pencil-simple"></i> 名前を変更';
-        renameBtn.onclick = (e) => {
+        renameBtn.onclick = async (e) => {
             e.stopPropagation();
             closeContextMenu();
             const newTitle = prompt("新しいチャット名を入力:", chat.title);
             if (newTitle) {
                 chat.title = newTitle;
-                saveChat();
+                await dbUpdateChat(chatId, { title: newTitle });
                 renderChatHistory();
                 if (chat.id === currentChatId) {
                     document.getElementById('chat-title').textContent = newTitle;
@@ -410,11 +460,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const pinBtn = document.createElement('button');
         pinBtn.className = 'context-menu-item';
         pinBtn.innerHTML = isPinned ? '<i class="ph ph-push-pin-slash"></i> ピン留めを解除' : '<i class="ph ph-push-pin"></i> ピン留めする';
-        pinBtn.onclick = (e) => {
+        pinBtn.onclick = async (e) => {
             e.stopPropagation();
             closeContextMenu();
             chat.isPinned = !chat.isPinned;
-            saveChat();
+            await dbUpdateChat(chatId, { isPinned: chat.isPinned });
             renderChatHistory();
         };
 
@@ -422,12 +472,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const deleteBtn = document.createElement('button');
         deleteBtn.className = 'context-menu-item delete';
         deleteBtn.innerHTML = '<i class="ph ph-trash"></i> 削除';
-        deleteBtn.onclick = (e) => {
+        deleteBtn.onclick = async (e) => {
             e.stopPropagation();
             closeContextMenu();
             if (confirm(`チャット「${chat.title}」を削除してもよろしいですか？`)) {
                 chats = chats.filter(c => c.id !== chatId);
-                localStorage.setItem('jinoAllChats', JSON.stringify(chats));
+                await dbDeleteChat(chatId);
                 if (currentChatId === chatId) {
                     currentChatId = null;
                     chatArea.innerHTML = '';
@@ -489,20 +539,17 @@ document.addEventListener('DOMContentLoaded', () => {
         renderChatHistory();
     }
 
-    function createNewChat() {
-        if (currentChatId) saveChat();
+    async function createNewChat() {
+        if (currentChatId) await saveChat();
 
-        const id = generateId();
-        const newChat = {
-            id: id,
-            title: "新しいチャット",
-            messages: [],
-            timestamp: Date.now()
-        };
-        chats.unshift(newChat); // Add to top
-        localStorage.setItem('jinoAllChats', JSON.stringify(chats));
+        const newChat = await dbCreateChat('新しいチャット');
+        if (!newChat) {
+            console.error('チャット作成に失敗しました');
+            return;
+        }
+        chats.unshift(newChat);
 
-        switchChat(id);
+        switchChat(newChat.id);
 
         // Initial Message
         addMessage("よし、新しい冒険の始まりだな！ 何でも話してくれよ。", 'jino', true);
@@ -681,11 +728,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- Settings Logic ---
+    // --- Settings/Logout Logic ---
     const settingsBtn = document.getElementById('settings-btn');
     if (settingsBtn) {
-        settingsBtn.addEventListener('click', () => {
-            alert('設定画面はまだ準備中だぜ！どんな設定が欲しいか教えてくれよな。');
+        settingsBtn.addEventListener('click', async () => {
+            const confirmLogout = confirm('ログアウトしますか？');
+            if (confirmLogout && typeof logout === 'function') {
+                await logout();
+            }
         });
     }
 
@@ -850,8 +900,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Load chat on boot
-    loadChat();
+    // Load chat on boot (Supabaseから非同期読み込み)
+    initApp();
 
     // Initialize Room Mode
     if (typeof toggleRoomMode === 'function') {

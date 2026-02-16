@@ -1,0 +1,22 @@
+// ============================================
+// JINO Sync - Supabase 共通設定
+// ============================================
+// このファイルでSupabaseの設定を一元管理する。
+// auth.js, auth-guard.js から個別の設定を削除し、
+// このファイルを先に読み込むことで共通化する。
+
+// Supabase Configuration
+const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
+
+// Whitelist - Yuuka's email only
+const ALLOWED_EMAILS = ['321mugen@gmail.com'];
+
+// Initialize Supabase client (single instance for entire app)
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+    }
+});
