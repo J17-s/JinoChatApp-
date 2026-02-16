@@ -7,7 +7,7 @@
 
 // Supabase Configuration
 const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgzMTA0MDAsImV4cCI6MjA4Mzg4NjQwMH0.SzbwPI_W4sIxgvwB1zhOpGApuoPvzfdzkHN1fCDMoLE';
 
 // Whitelist - Yuuka's email only
 const ALLOWED_EMAILS = ['321mugen@gmail.com'];
