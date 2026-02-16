@@ -220,11 +220,44 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentChatId = null;
 
     // アプリ初期化（Supabaseからデータを読み込む）
-    // 認証フロー: OAuthコールバック処理は callback.html が担当。
-    // ここでは既存セッション確認 + ホワイトリストチェックのみ行う。
+    // 認証フロー: login.html → Google OAuth → index.html(?code=xxx)
+    // SDK の detectSessionInUrl + flowType: 'pkce' が自動処理する。
     async function initApp() {
         try {
-            // 既存セッション確認
+            // URLに ?code= がある場合、SDKが自動的にセッションを確立する
+            // onAuthStateChange で SIGNED_IN イベントを待つ
+            const hasCode = new URLSearchParams(window.location.search).has('code');
+
+            if (hasCode) {
+                console.log('🔐 PKCE code 検出、SDK がセッション確立中...');
+
+                // SDKの自動セッション確立を待つ
+                const session = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('セッション確立タイムアウト'));
+                    }, 15000);
+
+                    supabaseClient.auth.onAuthStateChange((event, session) => {
+                        console.log('🔔 Auth Event:', event, session ? session.user.email : 'no session');
+                        if (event === 'SIGNED_IN' && session) {
+                            clearTimeout(timeout);
+                            resolve(session);
+                        } else if (event === 'TOKEN_REFRESHED' && session) {
+                            clearTimeout(timeout);
+                            resolve(session);
+                        }
+                    });
+                });
+
+                // URLから code パラメータを消す
+                window.history.replaceState({}, document.title, window.location.pathname);
+
+                // ホワイトリストチェック & アプリ起動
+                await startApp(session);
+                return;
+            }
+
+            // URLにcodeがない場合 → 既存セッション確認
             const { data, error } = await supabaseClient.auth.getSession();
 
             if (error) {
@@ -233,43 +266,49 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const session = data.session;
-
-            if (!session) {
+            if (!data.session) {
                 console.log('❌ セッションなし、ログインページへ');
                 window.location.href = 'login.html';
                 return;
             }
 
-            // ホワイトリストチェック
-            const userEmail = session.user.email.toLowerCase();
-            const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === userEmail);
-            if (!isAllowed) {
-                console.log('🚫 許可されていないユーザー:', userEmail);
-                await supabaseClient.auth.signOut();
-                alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
-                window.location.href = 'login.html';
-                return;
-            }
+            console.log('✅ 既存セッション:', data.session.user.email);
+            await startApp(data.session);
 
-            // ✅ 認証OK！画面を表示 & プロフィール更新
-            console.log('🎉 認証成功:', userEmail);
-            document.getElementById('app-layout').style.visibility = 'visible';
-            updateUserProfile(session.user);
-
-            // localStorageの古いデータがあればSupabaseへ移行
-            await dbMigrateFromLocalStorage();
-
-            // Supabaseからチャット一覧を読み込む
-            chats = await dbLoadAllChats();
-            console.log(`📂 ${chats.length}件のチャットを読み込みました`);
-
-            // 初期表示
-            loadChat();
         } catch (err) {
             console.error('🚨 initApp エラー:', err);
+            alert('ログインに失敗しました。もう一度お試しください。');
             window.location.href = 'login.html';
         }
+    }
+
+    // セッション確立後のアプリ起動処理
+    async function startApp(session) {
+        // ホワイトリストチェック
+        const userEmail = session.user.email.toLowerCase();
+        const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === userEmail);
+        if (!isAllowed) {
+            console.log('🚫 許可されていないユーザー:', userEmail);
+            await supabaseClient.auth.signOut();
+            alert(`このアカウント (${userEmail}) はアクセスが許可されていません。\nYuuka専用のアプリです。`);
+            window.location.href = 'login.html';
+            return;
+        }
+
+        // ✅ 認証OK！画面を表示 & プロフィール更新
+        console.log('🎉 認証成功:', userEmail);
+        document.getElementById('app-layout').style.visibility = 'visible';
+        updateUserProfile(session.user);
+
+        // localStorageの古いデータがあればSupabaseへ移行
+        await dbMigrateFromLocalStorage();
+
+        // Supabaseからチャット一覧を読み込む
+        chats = await dbLoadAllChats();
+        console.log(`📂 ${chats.length}件のチャットを読み込みました`);
+
+        // 初期表示
+        loadChat();
     }
 
     // Generate ID (UUID はSupabase側で生成するが、互換用に残す)

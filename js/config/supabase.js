@@ -13,10 +13,12 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const ALLOWED_EMAILS = ['321mugen@gmail.com'];
 
 // Initialize Supabase client (single instance for entire app)
+// flowType: 'pkce' を使用 (Implicit の #access_token より安全で確実)
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: true,
+        flowType: 'pkce'
     }
 });
