@@ -101,16 +101,6 @@
             text-decoration: none;
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #a78bfa, #7c3aed);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 15px rgba(167, 139, 250, 0.4);
-        }
-
         .btn-outline {
             background: transparent;
             border: 1px solid #444;
@@ -157,10 +147,28 @@
 
     <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- 共通設定 (SUPABASE_URL, SUPABASE_ANON_KEY, ALLOWED_EMAILS, supabaseClient) -->
-    <script src="js/config/supabase.js?v=6"></script>
 
     <script>
+        // ============================================
+        // callback.html 専用の Supabase クライアント
+        // ============================================
+        // 重要: detectSessionInUrl: true により、SDK が
+        // URLハッシュ(#access_token=...)やクエリ(?code=...)を
+        // 自動的に解析してセッションを確立する。
+        // 手動でパースする必要はない。
+
+        const SUPABASE_URL = 'https://njvarmfkytofbboqjgeu.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qdmFybWZreXRvZmJib3FqZ2V1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3ODI4NDUsImV4cCI6MjA1MjM1ODg0NX0.sb_publishable_jjKlMTBb7xXxp6eX4E0yoQ_-I1fGjHU';
+        const ALLOWED_EMAILS = ['321mugen@gmail.com'];
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true
+            }
+        });
+
         const statusEl = document.getElementById('status');
         const subStatusEl = document.getElementById('sub-status');
         const logEl = document.getElementById('log');
@@ -186,151 +194,90 @@
             spinner.classList.add('success');
         }
 
-        async function processCallback() {
-            log("🚀 認証コールバック開始...");
+        // メールチェック & リダイレクト
+        async function handleUser(user) {
+            const email = user.email.toLowerCase();
+            log("📧 メールチェック: " + email);
 
-            // Safety timer: 8秒後にコントロールを表示
-            const safetyTimer = setTimeout(() => {
-                controls.style.display = 'flex';
-                log("🕒 安全タイマー発動。コントロールを表示。");
-            }, 8000);
+            const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === email);
 
-            try {
-                // ===================================
-                // Step 1: セッションの取得
-                // ===================================
-
-                let session = null;
-
-                // ① PKCE フロー: URLに ?code= がある場合
-                const urlParams = new URLSearchParams(window.location.search);
-                const code = urlParams.get('code');
-
-                if (code) {
-                    log("🔐 PKCE code 検出...");
-                    statusEl.textContent = 'セッションを確立中...';
-
-                    const { data, error } = await supabaseClient.auth.exchangeCodeForSession(code);
-
-                    if (error) {
-                        log("❌ PKCE エラー: " + error.message);
-                        showError('認証に失敗しました', 'もう一度ログインしてください');
-                        clearTimeout(safetyTimer);
-                        return;
-                    }
-
-                    if (data?.session) {
-                        session = data.session;
-                        log("✅ PKCE セッション確立: " + session.user.email);
-                    }
-
-                    // URLからcodeを消す
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-
-                // ② Implicit フロー: ハッシュに access_token がある場合
-                if (!session && window.location.hash.includes('access_token')) {
-                    log("🔐 Implicit トークン検出...");
-                    statusEl.textContent = 'セッションを確立中...';
-
-                    // Supabase SDK が自動的にハッシュからセッションを復元するのを待つ
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    const { data: { session: hashSession }, error } = await supabaseClient.auth.getSession();
-
-                    if (error) {
-                        log("❌ Implicit エラー: " + error.message);
-                        showError('認証に失敗しました', 'もう一度ログインしてください');
-                        clearTimeout(safetyTimer);
-                        return;
-                    }
-
-                    if (hashSession) {
-                        session = hashSession;
-                        log("✅ Implicit セッション確立: " + session.user.email);
-                    }
-
-                    // URLからハッシュを消す
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-
-                // ③ 既存セッション確認
-                if (!session) {
-                    log("⏳ 既存セッション確認中...");
-                    const { data } = await supabaseClient.auth.getSession();
-                    session = data.session;
-
-                    if (session) {
-                        log("✅ 既存セッション発見: " + session.user.email);
-                    }
-                }
-
-                // ④ それでもセッションが無い場合 → onAuthStateChange で待つ
-                if (!session) {
-                    log("⏳ セッション待機中...");
-                    statusEl.textContent = 'ログイン中...';
-                    subStatusEl.textContent = 'セッションを待っています...';
-
-                    session = await new Promise((resolve, reject) => {
-                        const timeout = setTimeout(() => {
-                            reject(new Error('セッション取得タイムアウト'));
-                        }, 10000);
-
-                        supabaseClient.auth.onAuthStateChange((event, newSession) => {
-                            log("🔔 Auth Event: " + event);
-                            if (newSession) {
-                                clearTimeout(timeout);
-                                resolve(newSession);
-                            }
-                        });
-                    });
-                }
-
-                // ===================================
-                // Step 2: メールのホワイトリストチェック
-                // ===================================
-                const userEmail = session.user.email.toLowerCase();
-                log("📧 メールチェック: " + userEmail);
-
-                const isAllowed = ALLOWED_EMAILS.some(e => e.toLowerCase() === userEmail);
-
-                if (isAllowed) {
-                    // ✅ 許可されたユーザー！
-                    log("✅ アクセス許可: " + userEmail);
-                    showSuccess('おかえり、ユウカ！', 'アプリに接続中...');
-                    clearTimeout(safetyTimer);
-
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 800);
-                } else {
-                    // 🚫 許可されていないユーザー
-                    log("🚫 アクセス拒否: " + userEmail);
-
-                    // セッションを破棄
-                    await supabaseClient.auth.signOut();
-                    log("🔓 セッションを破棄しました");
-
-                    showError('アクセスが許可されていません', '');
-                    unauthorizedArea.innerHTML = `
-                        <div class="unauthorized-msg">
-                            <strong>このアプリは Yuuka 専用です。</strong><br>
-                            ログインしたアカウント (${userEmail}) にはアクセス権がありません。
-                        </div>
-                    `;
-                    clearTimeout(safetyTimer);
-                    controls.style.display = 'flex';
-                }
-
-            } catch (err) {
-                log("🚨 エラー: " + err.message);
-                showError('認証に失敗しました', err.message);
-                clearTimeout(safetyTimer);
+            if (isAllowed) {
+                log("✅ アクセス許可！");
+                showSuccess('おかえり、ユウカ！', 'アプリに接続中...');
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 800);
+            } else {
+                log("🚫 アクセス拒否: " + email);
+                await supabaseClient.auth.signOut();
+                log("🔓 セッション破棄");
+                showError('アクセスが許可されていません', '');
+                unauthorizedArea.innerHTML = `
+                    <div class="unauthorized-msg">
+                        <strong>このアプリは Yuuka 専用です。</strong><br>
+                        ログインしたアカウント (${email}) にはアクセス権がありません。
+                    </div>
+                `;
             }
         }
 
-        // ページ読み込み後に実行
-        window.addEventListener('load', processCallback);
+        // ============================================
+        // メイン処理: SDK に全て任せる
+        // ============================================
+        // onAuthStateChange を使って、SDK がURLを解析して
+        // セッションを確立するのを待つだけ。
+
+        log("🚀 認証コールバック開始...");
+        log("📍 URL: " + window.location.href.substring(0, 80) + "...");
+
+        let handled = false;
+
+        // 安全タイマー: 15秒後にコントロール表示
+        const safetyTimer = setTimeout(() => {
+            if (!handled) {
+                log("⏰ タイムアウト");
+                showError('認証に失敗しました', 'もう一度ログインしてください');
+            }
+        }, 15000);
+
+        // SDK の認証状態変化をリッスン
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
+            log("🔔 Auth Event: " + event);
+
+            if (handled) return;
+
+            if (event === 'SIGNED_IN' && session) {
+                // ✅ ログイン成功！メールチェックへ
+                handled = true;
+                clearTimeout(safetyTimer);
+                log("🎉 セッション確立: " + session.user.email);
+                await handleUser(session.user);
+
+            } else if (event === 'INITIAL_SESSION' && session) {
+                // 既にセッションがある状態でページに来た場合
+                handled = true;
+                clearTimeout(safetyTimer);
+                log("🎉 既存セッション: " + session.user.email);
+                await handleUser(session.user);
+
+            } else if (event === 'INITIAL_SESSION' && !session) {
+                // INITIAL_SESSION で session が null の場合、
+                // まだ SDK が URL を処理中の可能性がある。
+                // SIGNED_IN イベントを待つ。
+                log("⏳ 初期化完了、セッション待機中...");
+                statusEl.textContent = 'ログイン処理中...';
+
+                // ただし、URLにトークンもコードもない場合はログインへ戻す
+                const hasHash = window.location.hash.includes('access_token');
+                const hasCode = new URLSearchParams(window.location.search).has('code');
+                if (!hasHash && !hasCode) {
+                    log("📍 URLにトークンなし、ログインページへ");
+                    handled = true;
+                    clearTimeout(safetyTimer);
+                    window.location.href = 'login.html';
+                }
+            }
+        });
     </script>
 </body>
 
